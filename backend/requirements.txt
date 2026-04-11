@@ -1,0 +1,16 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+langchain==0.3.22
+langchain-core==0.3.56
+langchain-community==0.3.20
+langchain-groq==0.2.5
+langchain-huggingface==0.1.2
+langchain-chroma==0.2.2
+langchain-text-splitters==0.3.7
+chromadb==0.6.3
+pypdf==5.1.0
+python-dotenv==1.0.1
+pydantic==2.10.4
+sentence-transformers==3.3.1
+torch==2.5.1
