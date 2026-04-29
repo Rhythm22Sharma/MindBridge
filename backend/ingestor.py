@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 CHROMA_DIR = "./chroma_store"
 
-CHUNK_SIZE = 2048    # chars ≈ 512 tokens (4 chars/token for English)
-CHUNK_OVERLAP = 256  # chars ≈ 64 tokens
+CHUNK_SIZE = 1024    # chars ≈ 512 tokens (4 chars/token for English)
+CHUNK_OVERLAP = 100  # chars ≈ 64 tokens
 
 
 @lru_cache(maxsize=1)
