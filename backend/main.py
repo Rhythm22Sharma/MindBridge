@@ -2,10 +2,11 @@
 MindBridge FastAPI backend.
 
 Endpoints:
-  POST /upload        — ingest a PDF or .txt file
-  POST /chat/stream   — streaming SSE chat response
-  POST /chat/reset    — clear conversation history
-  GET  /health        — health check
+  POST /upload            — ingest a PDF or .txt file
+  POST /chat/stream       — streaming SSE chat response
+  POST /chat/reset        — clear conversation history
+  GET  /health            — health check
+  POST /voice/transcribe  — transcribe audio using Groq Whisper (NEW)
 """
 
 import os
@@ -19,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from groq import Groq
 
 load_dotenv()
 
@@ -35,7 +37,7 @@ app = FastAPI(title="MindBridge API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js dev server
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,10 +63,6 @@ def health(session_id: str = "default"):
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...), session_id: str = "default"):
-    """
-    Accept a PDF or .txt file, chunk + embed it into ChromaDB.
-    Returns ingestion stats.
-    """
     suffix = Path(file.filename).suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -72,16 +70,13 @@ async def upload_document(file: UploadFile = File(...), session_id: str = "defau
             detail=f"Unsupported file type '{suffix}'. Only PDF and .txt are accepted.",
         )
 
-    # Stream to a temp file — avoids loading large PDFs fully into RAM
     tmp_dir = tempfile.mkdtemp()
-    # Use a safe fixed filename — original filename may contain spaces or
-    # special chars that break path handling on some OS
     tmp_path = os.path.join(tmp_dir, "upload" + suffix)
 
     try:
         size_bytes = 0
         with open(tmp_path, "wb") as f:
-            while chunk := await file.read(1024 * 1024):  # 1MB chunks
+            while chunk := await file.read(1024 * 1024):
                 size_bytes += len(chunk)
                 if size_bytes > MAX_FILE_SIZE_MB * 1024 * 1024:
                     raise HTTPException(
@@ -114,10 +109,6 @@ async def upload_document(file: UploadFile = File(...), session_id: str = "defau
 
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest):
-    """
-    Stream the LLM response as Server-Sent Events.
-    Each event: data: {"type": "token"|"sources"|"done"|"error", "data": ...}
-    """
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
@@ -132,7 +123,7 @@ async def chat_stream(req: ChatRequest):
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering if proxied
+            "X-Accel-Buffering": "no",
         },
     )
 
@@ -141,3 +132,47 @@ async def chat_stream(req: ChatRequest):
 def reset_history(req: ResetRequest):
     clear_history(req.session_id)
     return {"status": "ok", "message": "Conversation history cleared."}
+
+
+# ── NEW: Voice Transcription ──────────────────────────────────────────────────
+@app.post("/voice/transcribe")
+async def transcribe_voice(audio: UploadFile = File(...)):
+    """
+    Receive audio blob from browser, send to Groq Whisper, return text.
+    Uses the same GROQ_API_KEY already in .env — no new key needed.
+    """
+    tmp_dir = tempfile.mkdtemp()
+    tmp_path = os.path.join(tmp_dir, "recording.webm")
+
+    try:
+        # Save audio to temp file
+        with open(tmp_path, "wb") as f:
+            content = await audio.read()
+            if len(content) > 25 * 1024 * 1024:  # 25MB Groq limit
+                raise HTTPException(status_code=413, detail="Audio too large. Max 25MB.")
+            f.write(content)
+
+        logger.info("Transcribing audio (%.1f KB)", len(content) / 1024)
+
+        # Send to Groq Whisper
+        client = Groq(api_key=os.environ["GROQ_API_KEY"])
+        with open(tmp_path, "rb") as f:
+            transcription = client.audio.transcriptions.create(
+                file=("recording.webm", f.read()),
+                model="whisper-large-v3-turbo",
+                response_format="text",
+                language="en",
+            )
+
+        # Groq returns plain string when response_format="text"
+        text = transcription if isinstance(transcription, str) else transcription.text
+        logger.info("Transcribed: '%s'", text[:80])
+        return {"text": text.strip()}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Transcription failed")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)

@@ -12,7 +12,6 @@ interface Message {
   isOutOfScope?: boolean
 }
 
-// ── Spinner ───────────────────────────────────────────────────────────────────
 function Spinner() {
   return (
     <span className="inline-flex gap-1 items-center">
@@ -27,7 +26,6 @@ function Spinner() {
   )
 }
 
-// ── Source Badges ─────────────────────────────────────────────────────────────
 function SourceBadges({ sources }: { sources: Source[] }) {
   return (
     <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-stone-700">
@@ -43,7 +41,6 @@ function SourceBadges({ sources }: { sources: Source[] }) {
   )
 }
 
-// ── Upload Zone ───────────────────────────────────────────────────────────────
 type UploadState = 'idle' | 'uploading' | 'success' | 'error'
 
 function UploadZone({
@@ -119,16 +116,13 @@ function UploadZone({
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
       className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${
-        dragging
-          ? 'border-amber-500/60 bg-amber-500/5'
-          : state === 'error'
-          ? 'border-red-500/40 bg-red-500/5'
-          : 'border-stone-700 hover:border-stone-600 bg-stone-800/30 hover:bg-stone-800/50'
+        dragging ? 'border-amber-500/60 bg-amber-500/5'
+        : state === 'error' ? 'border-red-500/40 bg-red-500/5'
+        : 'border-stone-700 hover:border-stone-600 bg-stone-800/30 hover:bg-stone-800/50'
       }`}
     >
       <input ref={inputRef} type="file" accept=".pdf,.txt" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
-
       {state === 'uploading' ? (
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -162,10 +156,8 @@ function UploadZone({
   )
 }
 
-// ── Message Bubble ────────────────────────────────────────────────────────────
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user'
-
   if (isUser) {
     return (
       <div className="flex justify-end">
@@ -175,7 +167,6 @@ function MessageBubble({ msg }: { msg: Message }) {
       </div>
     )
   }
-
   return (
     <div className="flex justify-start gap-3">
       <div className="w-7 h-7 rounded-lg bg-stone-700 border border-stone-600 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -188,9 +179,7 @@ function MessageBubble({ msg }: { msg: Message }) {
           ? 'bg-stone-800/80 border border-amber-500/20 text-amber-300'
           : 'bg-stone-800 border border-stone-700 text-stone-200'
       }`}>
-        {msg.isStreaming && msg.text === '' ? (
-          <Spinner />
-        ) : (
+        {msg.isStreaming && msg.text === '' ? <Spinner /> : (
           <p className="whitespace-pre-wrap">{msg.text}</p>
         )}
         {msg.isStreaming && msg.text !== '' && (
@@ -204,7 +193,91 @@ function MessageBubble({ msg }: { msg: Message }) {
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ── NEW: Voice Button ─────────────────────────────────────────────────────────
+function VoiceMicButton({
+  onResult,
+  disabled,
+}: {
+  onResult: (text: string) => void
+  disabled: boolean
+}) {
+  const [recording, setRecording] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+
+  const start = async () => {
+    setError('')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      recorderRef.current = recorder
+      chunksRef.current = []
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        setLoading(true)
+        try {
+          const form = new FormData()
+          form.append('audio', new File([blob], 'recording.webm', { type: 'audio/webm' }))
+          const res = await fetch('/api/voice/transcribe', { method: 'POST', body: form })
+          if (!res.ok) throw new Error('Transcription failed')
+          const data = await res.json()
+          if (data.text) onResult(data.text)
+        } catch (e: any) {
+          setError(e.message || 'Transcription failed')
+        } finally {
+          setLoading(false)
+        }
+      }
+      recorder.start()
+      setRecording(true)
+    } catch (e: any) {
+      setError(e.name === 'NotAllowedError' ? 'Mic access denied' : 'Mic error')
+    }
+  }
+
+  const stop = () => {
+    recorderRef.current?.stop()
+    setRecording(false)
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={recording ? stop : start}
+        disabled={disabled || loading}
+        title={recording ? 'Stop recording' : 'Voice input'}
+        className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-150 ${
+          recording ? 'bg-red-500 text-white animate-pulse'
+          : loading ? 'bg-stone-700 text-stone-500 cursor-wait'
+          : disabled ? 'bg-stone-800 text-stone-700 cursor-not-allowed'
+          : 'bg-stone-700 hover:bg-stone-600 text-stone-300'
+        }`}
+      >
+        {loading ? (
+          <div className="w-3 h-3 border border-stone-400 border-t-transparent rounded-full animate-spin" />
+        ) : recording ? (
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+            <rect x="6" y="6" width="12" height="12" rx="1" />
+          </svg>
+        ) : (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+        )}
+      </button>
+      {error && (
+        <div className="absolute bottom-10 right-0 w-44 bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-xs text-red-400 z-10">
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Home() {
   const [sessionId, setSessionId] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
@@ -234,6 +307,12 @@ export default function Home() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // When voice returns text — put it in the input box
+  const handleVoiceResult = useCallback((text: string) => {
+    setInput(text)
+    textareaRef.current?.focus()
+  }, [])
 
   const handleSend = useCallback(() => {
     const q = input.trim()
@@ -291,10 +370,8 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-stone-900 text-stone-100 overflow-hidden">
 
-      {/* ── Sidebar ── */}
+      {/* Sidebar */}
       <div className="w-64 flex-shrink-0 border-r border-stone-800 flex flex-col bg-stone-900">
-
-        {/* Logo */}
         <div className="px-5 py-5 border-b border-stone-800">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center">
@@ -309,14 +386,12 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Document section */}
         <div className="px-4 py-4 flex-1">
           <div className="text-xs font-medium text-stone-500 uppercase tracking-wider mb-3">Document</div>
           <UploadZone
             onSuccess={(name, pages, chunks) => { setDocLoaded(true); setDocName(name) }}
             sessionId={sessionId}
           />
-
           {docLoaded && (
             <div className="mt-4 p-3 rounded-lg bg-stone-800/50 border border-stone-700/50">
               <div className="flex items-center gap-2 mb-2">
@@ -330,28 +405,18 @@ export default function Home() {
           )}
         </div>
 
-        {/* ── Bottom actions ── */}
         <div className="px-4 py-4 border-t border-stone-800">
           {messages.length > 0 && (
             <button
               onClick={handleReset}
               className="w-full flex items-center gap-2.5 text-xs text-stone-500 hover:text-red-400 border border-stone-700/60 hover:border-red-500/30 hover:bg-red-500/[0.06] rounded-xl px-3 py-2.5 transition-all duration-150 group"
             >
-              <svg
-              style={{ width: '11px', height: '11px', flexShrink: 0 }}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-stone-600 group-hover:text-red-400 transition-colors duration-150"
-              >
+              <svg style={{ width: '11px', height: '11px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-stone-600 group-hover:text-red-400 transition-colors duration-150">
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
                 <path d="M10 11v6M14 11v6" />
                 <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                </svg>
+              </svg>
               <span>Clear conversation</span>
               <span className="ml-auto text-[10px] bg-stone-800 group-hover:bg-red-500/10 group-hover:text-red-400 text-stone-600 px-2 py-0.5 rounded-full font-medium transition-all duration-150">
                 {messages.filter((m) => m.role === 'user').length} msgs
@@ -359,13 +424,10 @@ export default function Home() {
             </button>
           )}
         </div>
+      </div>
 
-      </div>{/* ── End Sidebar ── */}
-
-      {/* ── Main chat area ── */}
+      {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
-
-        {/* Top bar */}
         <div className="px-6 py-4 border-b border-stone-800 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className={`w-2 h-2 rounded-full ${backendError ? 'bg-red-400' : 'bg-emerald-400'}`} />
@@ -378,7 +440,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Backend error */}
         {backendError && (
           <div className="mx-6 mt-4 bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-sm text-red-400 flex items-start gap-3">
             <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -391,7 +452,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
           {messages.length === 0 && !backendError && (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
@@ -405,19 +465,14 @@ export default function Home() {
                   {docLoaded ? 'Ask about your document' : 'Upload a document to begin'}
                 </div>
                 <div className="text-stone-600 text-sm mt-1">
-                  {docLoaded
-                    ? "I'll answer only from what's in the document"
-                    : 'Supports PDF and .txt files up to 50MB'}
+                  {docLoaded ? "I'll answer only from what's in the document" : 'Supports PDF and .txt files up to 50MB'}
                 </div>
               </div>
               {docLoaded && (
                 <div className="flex flex-wrap gap-2 justify-center mt-2">
                   {['Summarise the main points', 'What are the key concepts?', 'Create 5 quiz questions'].map((q) => (
-                    <button
-                      key={q}
-                      onClick={() => { setInput(q); textareaRef.current?.focus() }}
-                      className="text-xs text-stone-400 border border-stone-700 hover:border-stone-500 hover:text-stone-300 rounded-full px-3 py-1.5 transition-all duration-150"
-                    >
+                    <button key={q} onClick={() => { setInput(q); textareaRef.current?.focus() }}
+                      className="text-xs text-stone-400 border border-stone-700 hover:border-stone-500 hover:text-stone-300 rounded-full px-3 py-1.5 transition-all duration-150">
                       {q}
                     </button>
                   ))}
@@ -425,16 +480,13 @@ export default function Home() {
               )}
             </div>
           )}
-
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} msg={msg} />
-          ))}
+          {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
           <div ref={bottomRef} />
         </div>
 
-        {/* Input */}
+        {/* Input — mic button added between textarea and send button */}
         <div className="px-6 py-4 border-t border-stone-800 flex-shrink-0">
-          <div className={`flex gap-3 items-end bg-stone-800 border rounded-2xl px-4 py-3 transition-all duration-150 ${
+          <div className={`flex gap-2 items-end bg-stone-800 border rounded-2xl px-4 py-3 transition-all duration-150 ${
             docLoaded && !backendError ? 'border-stone-700 focus-within:border-amber-500/40' : 'border-stone-800'
           }`}>
             <textarea
@@ -450,20 +502,26 @@ export default function Home() {
                 backendError ? 'Backend offline…' :
                 !docLoaded ? 'Upload a document first…' :
                 isStreaming ? 'Generating response…' :
-                'Ask a question about your document…'
+                'Ask a question or press 🎤 to speak…'
               }
               disabled={!docLoaded || isStreaming || !!backendError}
               rows={1}
               className="flex-1 bg-transparent resize-none text-sm text-stone-200 placeholder-stone-600 focus:outline-none disabled:opacity-40 leading-relaxed"
               style={{ maxHeight: '120px' }}
             />
+
+            {/* Mic button */}
+            <VoiceMicButton
+              onResult={handleVoiceResult}
+              disabled={!docLoaded || !!backendError}
+            />
+
+            {/* Send button */}
             <button
               onClick={handleSend}
               disabled={!canSend}
               className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-150 ${
-                canSend
-                  ? 'bg-amber-500 hover:bg-amber-400 text-stone-900'
-                  : 'bg-stone-700 text-stone-600 cursor-not-allowed'
+                canSend ? 'bg-amber-500 hover:bg-amber-400 text-stone-900' : 'bg-stone-700 text-stone-600 cursor-not-allowed'
               }`}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -471,11 +529,9 @@ export default function Home() {
               </svg>
             </button>
           </div>
-          <p className="text-xs text-stone-700 mt-2 text-center">Enter to send · Shift+Enter for newline</p>
+          <p className="text-xs text-stone-700 mt-2 text-center">Enter to send · Shift+Enter for newline · 🎤 speak then send</p>
         </div>
-
-      </div>{/* ── End Main chat area ── */}
-
+      </div>
     </div>
   )
 }
