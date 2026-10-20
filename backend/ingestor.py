@@ -24,12 +24,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
+from config import CHUNK_SIZE, CHUNK_OVERLAP, CHROMA_DIR, EMBEDDING_MODEL_NAME
+
 logger = logging.getLogger(__name__)
-
-CHROMA_DIR = "./chroma_store"
-
-CHUNK_SIZE = 1024    # chars ≈ 512 tokens (4 chars/token for English)
-CHUNK_OVERLAP = 100  # chars ≈ 64 tokens
 
 
 @lru_cache(maxsize=1)
@@ -41,7 +38,7 @@ def _get_embeddings() -> HuggingFaceEmbeddings:
     """
     logger.info("Loading HuggingFace embedding model (first call may take ~30s)...")
     return HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_name=EMBEDDING_MODEL_NAME,
         model_kwargs={"device": "cpu"},
         encode_kwargs={"normalize_embeddings": True},
     )

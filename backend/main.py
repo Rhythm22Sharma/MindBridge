@@ -19,32 +19,32 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from dotenv import load_dotenv
 from groq import Groq
 
-load_dotenv()
-
-if not os.getenv("GROQ_API_KEY"):
-    raise RuntimeError("GROQ_API_KEY is not set. Copy .env.example to .env and add your key.")
-
+from config import (
+    GROQ_API_KEY,
+    CORS_ORIGINS,
+    ALLOWED_EXTENSIONS,
+    MAX_FILE_SIZE_MB,
+)
 from ingestor import ingest_document, collection_is_empty
 from rag_chain import stream_chat, clear_history
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
+if not GROQ_API_KEY:
+    logger.warning("GROQ_API_KEY is not set. Copy .env.example to .env and add your key.")
+
 app = FastAPI(title="MindBridge API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-ALLOWED_EXTENSIONS = {".pdf", ".txt"}
-MAX_FILE_SIZE_MB = 50
 
 
 class ChatRequest(BaseModel):
@@ -155,7 +155,9 @@ async def transcribe_voice(audio: UploadFile = File(...)):
         logger.info("Transcribing audio (%.1f KB)", len(content) / 1024)
 
         # Send to Groq Whisper
-        client = Groq(api_key=os.environ["GROQ_API_KEY"])
+        if not GROQ_API_KEY:
+            raise HTTPException(status_code=500, detail="GROQ_API_KEY is not configured on the server.")
+        client = Groq(api_key=GROQ_API_KEY)
         with open(tmp_path, "rb") as f:
             transcription = client.audio.transcriptions.create(
                 file=("recording.webm", f.read()),

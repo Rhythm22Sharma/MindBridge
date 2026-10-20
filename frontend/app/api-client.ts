@@ -1,4 +1,4 @@
-const BASE = 'http://localhost:8000'
+const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export interface UploadResult {
   filename: string
@@ -41,6 +41,18 @@ export async function resetHistory(sessionId: string): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId }),
   })
+}
+
+export async function transcribeAudio(blob: Blob): Promise<string> {
+  const form = new FormData()
+  form.append('audio', new File([blob], 'recording.webm', { type: 'audio/webm' }))
+  const res = await fetch(`${BASE}/voice/transcribe`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Transcription failed' }))
+    throw new Error(err.detail || 'Voice transcription failed')
+  }
+  const data = await res.json()
+  return data.text || ''
 }
 
 /**

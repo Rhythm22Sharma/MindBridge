@@ -22,12 +22,18 @@ from langchain_groq import ChatGroq
 from langchain.schema import HumanMessage, AIMessage, SystemMessage
 from langchain_core.messages import BaseMessage
 
+from config import (
+    GROQ_API_KEY,
+    LLM_MODEL_NAME,
+    LLM_TEMPERATURE,
+    LLM_MAX_TOKENS,
+    MAX_HISTORY_TURNS,
+)
 from ingestor import get_retriever
 
 logger = logging.getLogger(__name__)
 
 _histories: dict[str, List[BaseMessage]] = defaultdict(list)
-MAX_HISTORY_TURNS = 10
 
 SYSTEM_PROMPT = """You are MindBridge, a precise study assistant. You answer questions ONLY using the document excerpts provided below.
 
@@ -45,10 +51,10 @@ Document excerpts:
 
 def _get_llm() -> ChatGroq:
     return ChatGroq(
-        model="llama-3.3-70b-versatile",
-        api_key=os.environ["GROQ_API_KEY"],
-        temperature=0,        # 0 = maximum grounding discipline for RAG
-        max_tokens=1024,
+        model=LLM_MODEL_NAME,
+        api_key=GROQ_API_KEY,
+        temperature=LLM_TEMPERATURE,
+        max_tokens=LLM_MAX_TOKENS,
         streaming=True,
     )
 
