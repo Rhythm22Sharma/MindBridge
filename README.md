@@ -87,7 +87,7 @@ MindBridge/
 │   ├── main.py                 # FastAPI endpoints (SSE chat, upload, voice)
 │   ├── rag_chain.py            # LangChain Groq pipeline & hallucination guardrails
 │   ├── requirements.txt        # Python dependency manifest
-│   └── .env.example            # Backend environment template
+│   └── .env_example            # Backend environment template
 ├── frontend/                   # Next.js 14 Web Application
 │   ├── app/                    # Next.js App Router
 │   │   ├── api-client.ts       # Typed API client for upload, SSE chat, & voice
@@ -137,7 +137,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Configure your API key
-cp .env.example .env
+cp .env_example .env
 # Open .env and set your GROQ_API_KEY
 
 # Start backend server (runs on http://localhost:8000)
